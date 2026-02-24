@@ -63,10 +63,13 @@ set -- "$MCIX_CMD" overlay apply
 
 # Core flags
 set -- "$@" -assets "$PARAM_ASSETS"
-set -- "$@" -output "$PARAM_OUTPUT"
 set -- "$@" -overlay "$PARAM_OVERLAY"
+set -- "$@" -output "$PARAM_OUTPUT"
 
-# -properties (PARAM_PROPERTIES)
+# Create path to specified output file, since mcix overlay apply doesn't create it if it doesn't exist.
+mktouch "$PARAM_OUTPUT"
+
+# -properties (PARAM_PROPERTIES) (optional)
 if [ -n "${PARAM_PROPERTIES:-}" ]; then
   set -- "$@" -properties "$PARAM_PROPERTIES"
 fi
@@ -75,6 +78,8 @@ fi
 # Step summary
 # ------------
 write_step_summary() {
+  echo "Writing step summary for command '$MCIX_CMD_NAME' ..."
+
   # Surface "logged error ID" failures (if detected)
   if [ -n "${MCIX_LOGGED_ERROR_ID:-}" ] && \
      [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -w "$GITHUB_STEP_SUMMARY" ]; then
@@ -91,21 +96,12 @@ write_step_summary() {
     gh_error "$MCIX_CMD_NAME" "There was an error logged during the execution of '$MCIX_CMD_NAME'"
   fi
 
-  # Do we have a variable pointing to a JUnit XML file?
-  if [ -z "${PARAM_REPORT:-}" ] || [ ! -f "$PARAM_REPORT" ]; then
-    gh_warn "JUnit XML file not found" "Path: ${PARAM_REPORT:-<unset>}"
-
-  # Do we have a junit-to-summary command available?
-  elif [ -z "${MCIX_JUNIT_CMD:-}" ] || [ ! -x "$MCIX_JUNIT_CMD" ]; then
-    gh_warn "JUnit summarizer not executable" "Command: ${MCIX_JUNIT_CMD:-<unset>}"
-
   # Did GitHub provide a writable summary file?
-  elif [ -z "${GITHUB_STEP_SUMMARY:-}" ] || [ ! -w "$GITHUB_STEP_SUMMARY" ]; then
+  if [ -z "${GITHUB_STEP_SUMMARY:-}" ] || [ ! -w "$GITHUB_STEP_SUMMARY" ]; then
     gh_warn "GITHUB_STEP_SUMMARY not writable" "Skipping JUnit summary generation."
 
-  # Generate summary
   else
-    # Commenting out for now (too verbose.)
+    # Generate summary
     # gh_notice "Generating step summary" "Running JUnit summarizer and appending to GITHUB_STEP_SUMMARY."
 
     # mcix-junit-to-summary [--annotations] [--max-annotations N] <junit.xml> [title]
@@ -125,7 +121,7 @@ write_return_code_and_summary() {
   # Prefer MCIX_STATUS if set; fall back to $?
   rc=${MCIX_STATUS:-$?}
 
-  echo "return-code=$rc"
+  echo "Return code is $rc"
   echo "return-code=$rc" >>"$GITHUB_OUTPUT"
 
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] && return
