@@ -33,11 +33,16 @@ inputs:
   output:
     description: "Zip file or directory to write updated assets."
     required: true
-  overlay:
-    description: >-
-      Directory containing asset overlays. Each overlay will be applied in
-      specified order when providing multiple
-      (e.g., -overlay dir1 -overlay dir2)
+  overlays:
+    description: |
+      One or more overlay directories. Overlays are applied in the order specified.
+      Provide as comma- or newline-separated list.
+      Example:
+        overlays: overlays/base, overlays/customer
+        or
+        overlays: |
+          overlays/base
+          overlays/customer
     required: true
   properties:
     description: "Optional properties file with replacement values."
@@ -54,5 +59,5 @@ runs:
   env:
     PARAM_ASSETS: ${{ inputs.assets }}
     PARAM_OUTPUT: ${{ inputs.output }}
-    PARAM_OVERLAY: ${{ inputs.overlay }}
+    PARAM_OVERLAYS: ${{ inputs.overlays }}
     PARAM_PROPERTIES: ${{ inputs.properties }}

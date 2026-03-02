@@ -1,4 +1,4 @@
-#!/bin/sh -l
+#!/usr/bin/env bash
 # Don't use -l here; we want to preserve the PATH and other env vars 
 # as set in the base image, and not have it overridden by a login shell
 
@@ -21,7 +21,7 @@
 #  \__,_| .__/| .__/|_|\__, |
 #       |_|   |_|      |___/
 # 
-set -eu
+set -euo pipefail
 
 # Import MettleCI GitHub Actions utility functions
 . "/usr/share/mcix/common.sh"
@@ -48,11 +48,9 @@ MCIX_LOGGED_ERROR_ID=""
 # -------------------
 # Validate parameters
 # -------------------
-
 require PARAM_ASSETS "assets"
 require PARAM_OUTPUT "output"
-require PARAM_OVERLAY "overlay"
-
+require PARAM_OVERLAYS "overlays"
 
 # ------------------------
 # Build command to execute
@@ -63,8 +61,19 @@ set -- "$MCIX_CMD" overlay apply
 
 # Core flags
 set -- "$@" -assets "$PARAM_ASSETS"
-set -- "$@" -overlay "$PARAM_OVERLAY"
 set -- "$@" -output "$PARAM_OUTPUT"
+
+# Handle multiple overlays by splitting the newline-separated list and adding multiple -overlay flags.
+# We'll support both comma- and newline-separated lists for flexibility, but we'll normalize to newlines for processing.
+OVERLAYS_NL="${PARAM_OVERLAYS//,/\\n}"
+# Process values split by newlines, ignore empty/whitespace-only lines and add a -overlay flag for each non-empty line. 
+while IFS= read -r line; do
+  trimmed="$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  [ -z "$trimmed" ] && continue
+  set -- "$@" -overlay "$trimmed"
+done <<EOF
+${OVERLAYS_NL}
+EOF
 
 # Create path to specified output file, since mcix overlay apply doesn't create it if it doesn't exist.
 mkdir -p "$(dirname "$PARAM_OUTPUT")"
