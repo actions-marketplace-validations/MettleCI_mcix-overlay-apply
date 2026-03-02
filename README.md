@@ -190,7 +190,7 @@ jobs:
         with:
           assets: <required>
           output: <required>
-          overlay: <required>
+          overlays: <required>
           # properties: <optional>
 ```
 
@@ -202,7 +202,14 @@ jobs:
 | --- | --- | --- | --- |
 | `assets` | ✅ |  | Path to DataStage export zip file or directory. |
 | `output` | ✅ |  | Zip file or directory to write updated assets. |
-| `overlay` | ✅ |  | Directory containing asset overlays. Each overlay will be applied in specified order when providing multiple (e.g., -overlay dir1 -overlay dir2) |
+| `overlays` | ✅ |  | One or more overlay directories. Overlays are applied in the order specified.
+Provide as comma- or newline-separated list.
+Example:
+  overlays: overlays/base, overlays/customer
+  or
+  overlays: \|
+    overlays/base
+    overlays/customer |
 | `properties` | ❌ |  | Optional properties file with replacement values. |
 
 ---
