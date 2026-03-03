@@ -21,6 +21,7 @@
 #  \__,_| .__/| .__/|_|\__, |
 #       |_|   |_|      |___/
 # 
+
 set -euo pipefail
 
 # Import MettleCI GitHub Actions utility functions
@@ -29,14 +30,12 @@ set -euo pipefail
 # -----
 # Setup
 # -----
+export MCIX_CMD_NAME="mcix overlay apply"
 export MCIX_BIN_DIR="/usr/share/mcix/bin"
 export MCIX_LOG_DIR="/usr/share/mcix"
-export MCIX_CMD="mcix" 
-export MCIX_CMD_NAME="mcix overlay apply"
 export MCIX_JUNIT_CMD="/usr/share/mcix/mcix-junit-to-summary"
 export MCIX_JUNIT_CMD_OPTIONS="--annotations"
-# Make us immune to runner differences or potential base-image changes
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$MCIX_BIN_DIR"
+export PATH="$PATH:$MCIX_BIN_DIR"
 
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT must be set}"
 
@@ -57,7 +56,7 @@ require PARAM_OVERLAYS "overlays"
 # ------------------------
 
 # Start argv
-set -- "$MCIX_CMD" overlay apply 
+set -- "$MCIX_CMD_NAME" 
 
 # Core flags
 set -- "$@" -assets "$PARAM_ASSETS"
@@ -87,8 +86,6 @@ fi
 # Step summary
 # ------------
 write_step_summary() {
-  echo "Writing step summary for command '$MCIX_CMD_NAME' ..."
-
   # Surface "logged error ID" failures (if detected)
   if [ -n "${MCIX_LOGGED_ERROR_ID:-}" ] && \
      [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -w "$GITHUB_STEP_SUMMARY" ]; then
@@ -111,8 +108,6 @@ write_step_summary() {
 
   else
     # Generate summary
-    # gh_notice "Generating step summary" "Running JUnit summarizer and appending to GITHUB_STEP_SUMMARY."
-
     gh_notice "$MCIX_CMD_NAME" "$MCIX_CMD_NAME completed successfully."
 
 #    # mcix-junit-to-summary [--annotations] [--max-annotations N] <junit.xml> [title]
@@ -132,13 +127,14 @@ write_return_code_and_summary() {
   # Prefer MCIX_STATUS if set; fall back to $?
   rc=${MCIX_STATUS:-$?}
 
-  echo "Return code is $rc"
   echo "return-code=$rc" >>"$GITHUB_OUTPUT"
 
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] && return
 
   write_step_summary
 }
+# Combine summary/output writing + temp cleanup in a single EXIT trap.
+trap 'write_return_code_and_summary; cleanup' EXIT
 
 
 # -------
@@ -153,9 +149,6 @@ fi
 tmp_out="$(mktemp)"
 cleanup() { rm -f "$tmp_out"; }
 
-# Combine summary/output writing + temp cleanup in a single EXIT trap.
-trap 'write_return_code_and_summary; cleanup' EXIT
-
 # Run the command, capture its output and status, but don't let `set -e` kill us.
 set +e
 "$@" 2>&1 | tee "$tmp_out"
@@ -166,6 +159,8 @@ set -e
 MCIX_LOGGED_ERROR_ID=""
 if mcix_has_logged_error "$tmp_out"; then
   MCIX_LOGGED_ERROR_ID="$(mcix_extract_logged_error_id "$tmp_out")"
+  # Treat logged errors as failures for the purpose of the step summary, even if the command itself didn't return a non-zero code.
+  MCIX_STATUS=1
 fi
 
 # Let the trap handle outputs & summary using MCIX_STATUS
