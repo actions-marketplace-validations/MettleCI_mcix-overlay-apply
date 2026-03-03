@@ -117,7 +117,7 @@ write_step_summary() {
 #      "$MCIX_JUNIT_CMD_OPTIONS" \
 #      "$PARAM_REPORT" \
 #      "$MCIX_CMD_NAME"  >> "$GITHUB_STEP_SUMMARY" || \
-#      gh_warn "JUnit summarizer failed" "Continuing without failing the action."
+#      gh_warn "JUnit summarizer for '${MCIX_CMD_NAME}' failed" "Continuing without failing the action."
   fi
 }
 
@@ -146,7 +146,7 @@ if [ ! -e "/github/workspace/.git" ]; then
   die "Repo contents not found in /github/workspace. Did you forget to run actions/checkout before this action?"
 fi
 
-# Capture output so we can detect "It has been logged (ID ...)" failures.
+# Prepare a file to capture output so we can detect "It has been logged (ID ...)" failures.
 tmp_out="$(mktemp)"
 cleanup() { rm -f "$tmp_out"; }
 
