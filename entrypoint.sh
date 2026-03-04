@@ -109,7 +109,7 @@ write_step_summary() {
 
   else
     # Generate summary
-    gh_notice "$MCIX_CMD_NAME" "$MCIX_CMD_NAME completed successfully."
+    gh_notice "$MCIX_CMD_NAME" "$MCIX_CMD_NAME applied overlays\n${PARAM_OVERLAYS}"
 
 #    # mcix-junit-to-summary [--annotations] [--max-annotations N] <junit.xml> [title]
 #    echo "Executing: $MCIX_JUNIT_CMD $MCIX_JUNIT_CMD_OPTIONS $PARAM_REPORT \"$MCIX_CMD_NAME\""
