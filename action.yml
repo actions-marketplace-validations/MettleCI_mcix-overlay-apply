@@ -19,7 +19,7 @@
 #  \__,_| .__/| .__/|_|\__, |
 #       |_|   |_|      |___/
 
-name: "MCIX DataStage Overlay Apply"
+name: "MCIX Overlay Apply"
 description: "Apply overlay directories to exported IBM Software Hub (Cloud Pak) DataStage assets using the MettleCI MCIX CLI"
 author: "DataMigrators"
 branding:
