@@ -32,7 +32,7 @@ set -euo pipefail
 # -----
 export MCIX_CMD_NAME="mcix overlay apply"
 export MCIX_BIN_DIR="/usr/share/mcix/bin"
-export MCIX_LOG_DIR="/usr/share/mcix"
+export MCIX_LOG_DIR="/usr/share/mcix/logs"
 export MCIX_JUNIT_CMD="/usr/share/mcix/mcix-junit-to-summary"
 export MCIX_JUNIT_CMD_OPTIONS="--annotations"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$MCIX_BIN_DIR"
@@ -43,6 +43,9 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$MCIX_
 MCIX_STATUS=0
 # Populated if command output matches: "It has been logged (ID ...)"
 MCIX_LOGGED_ERROR_ID=""
+
+# Recreate the default workspace for the runner that GitHub runs Docker inside of
+EXT_WS="/home/runner/work/${GITHUB_REPOSITORY#*/}/${GITHUB_REPOSITORY#*/}"
 
 # -------------------
 # Validate parameters
@@ -65,12 +68,14 @@ set -- "$@" -output "$PARAM_OUTPUT"
 
 # Handle multiple overlays by splitting the newline-separated list and adding multiple -overlay flags.
 # We'll support both comma- and newline-separated lists for flexibility, but we'll normalize to newlines for processing.
-OVERLAYS_NL="${PARAM_OVERLAYS//,/\\n}"
+OVERLAYS_NL="${PARAM_OVERLAYS//,/$'\n'}"
 # Process values split by newlines, ignore empty/whitespace-only lines and add a -overlay flag for each non-empty line. 
 while IFS= read -r line; do
   trimmed="$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  [ -z "$trimmed" ] && continue
-  set -- "$@" -overlay "$trimmed"
+  resolved="$(resolve_workspace_path "$trimmed")"
+  [ -z "$resolved" ] && continue
+  result="${resolved//$EXT_WS/$GITHUB_WORKSPACE}"
+  set -- "$@" -overlay "$result"
 done <<EOF
 ${OVERLAYS_NL}
 EOF
@@ -83,13 +88,23 @@ if [ -n "${PARAM_PROPERTIES:-}" ]; then
   set -- "$@" -properties "$PARAM_PROPERTIES"
 fi
 
+ADDITIONAL_ARGS="${PARAM_ADDITIONAL_ARGS:-}"
+if [ -n "$ADDITIONAL_ARGS" ]; then
+  readarray -t args < <(printf "%s" "$ADDITIONAL_ARGS" | xargs -n 1)
+
+  for arg in "${args[@]}"; do
+    set -- "$@" $arg
+  done
+fi
+
+echo "$@"
+
 # ------------
 # Step summary
 # ------------
 write_step_summary() {
   # Surface "logged error ID" failures (if detected)
-  if [ -n "${MCIX_LOGGED_ERROR_ID:-}" ] && \
-     [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -w "$GITHUB_STEP_SUMMARY" ]; then
+  if [ -n "${MCIX_LOGGED_ERROR_ID:-}" ] && [ -w "$GITHUB_STEP_SUMMARY" ]; then
     {
       echo "**❌ Error:** There was an error logged while running command '$MCIX_CMD_NAME'."
       if [ -n "${MCIX_LOGGED_ERROR_ID:-}" ]; then
@@ -98,6 +113,7 @@ write_step_summary() {
           || echo "(Failed to extract log details for ID ${MCIX_LOGGED_ERROR_ID})"
       fi
     } >>"$GITHUB_STEP_SUMMARY"
+
     # Set a workflow error annotation for visibility. This will show up in the 'Annotations' tab 
     # but it won't fail the action on its own (since some errors are "log and continue".)
     gh_error "$MCIX_CMD_NAME" "There was an error logged during the execution of '$MCIX_CMD_NAME'"
@@ -110,15 +126,37 @@ write_step_summary() {
   else
     # Generate summary
     gh_notice "$MCIX_CMD_NAME" "$MCIX_CMD_NAME applied overlays: ${PARAM_OVERLAYS}"
-
-#    # mcix-junit-to-summary [--annotations] [--max-annotations N] <junit.xml> [title]
-#    echo "Executing: $MCIX_JUNIT_CMD $MCIX_JUNIT_CMD_OPTIONS $PARAM_REPORT \"$MCIX_CMD_NAME\""
-#    "$MCIX_JUNIT_CMD" \
-#      "$MCIX_JUNIT_CMD_OPTIONS" \
-#      "$PARAM_REPORT" \
-#      "$MCIX_CMD_NAME"  >> "$GITHUB_STEP_SUMMARY" || \
-#      gh_warn "JUnit summarizer for '${MCIX_CMD_NAME}' failed" "Continuing without failing the action."
   fi
+
+  if [[ -f "${MCIX_LOG_DIR}/cli.$(date +%F).log" ]]; then
+    {
+      # Display the contents of the mcix command's log file. (collapsed by default)
+      echo '<details>'
+      echo "<summary>${MCIX_CMD_NAME} log - ${MCIX_LOG_DIR}/cli.$(date +%F).log</summary>"
+      echo # A blank line after the <summary> tag is required by GitHub to format the content correctly
+      echo '```'
+      cat "${MCIX_LOG_DIR}/cli.$(date +%F).log"
+      echo '```'
+      echo '</details>'
+    } >>"$GITHUB_STEP_SUMMARY"
+  else
+      gh_warn "Log file for '${MCIX_CMD_NAME}' not found" "Continuing without failing the action."
+  fi
+
+  for file in $MCIX_LOG_DIR/exception.*.log; do
+    if [ -f "$file" ]; then
+      {
+        # Display the contents of the mcix command's log file. (collapsed by default)
+        echo '<details>'
+        echo "<summary>Exception Log - $file</summary>"
+        echo # A blank line after the <summary> tag is required by GitHub to format the content correctly
+        echo '```'
+        cat $file
+        echo '```'
+        echo '</details>'
+      } >>"$GITHUB_STEP_SUMMARY"
+    fi
+  done 2>/dev/null
 }
 
 # ---------
@@ -141,11 +179,6 @@ trap 'write_return_code_and_summary; cleanup' EXIT
 # -------
 # Execute
 # -------
-# Check the repository has been checked out
-if [ ! -e "/github/workspace/.git" ]; then
-  die "Repo contents not found in /github/workspace. Did you forget to run actions/checkout before this action?"
-fi
-
 # Prepare a file to capture output so we can detect "It has been logged (ID ...)" failures.
 tmp_out="$(mktemp)"
 cleanup() { rm -f "$tmp_out"; }

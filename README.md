@@ -161,6 +161,9 @@ See  https://nextgen.mettleci.io/mettleci-cli/overlay-namespace/#overlay-apply
 <!-- BEGIN MCIX-ACTION-DOCS -->
 # MCIX Overlay Apply
 
+> [!CAUTION]
+> This action is provided as a **technology preview** which may change, break, or disappear at any point and without warning.
+
 Apply overlay directories to exported IBM Software Hub (Cloud Pak) DataStage assets using the MettleCI MCIX CLI
 
 > Namespace: `overlay`<br>
@@ -192,6 +195,7 @@ jobs:
           output: <required>
           overlays: <required>
           # properties: <optional>
+          # additional-args: <optional>
 ```
 
 ---
@@ -211,6 +215,7 @@ Example:
     overlays/base
     overlays/customer |
 | `properties` | ❌ |  | Optional properties file with replacement values. |
+| `additional-args` | ❌ |  | Additional raw arguments to append to the mcix command |
 
 ---
 
